@@ -523,7 +523,7 @@ async function connect() {
         }
 
         logActivity(`连接成功：${chipName}`, 'success');
-        updateStatus(`已连接（${chipName}）`);
+        updateStatus(`已连接：${chipName}`);
         updateDeviceInfo();
     } catch (error) {
         logActivity(`连接失败：${error.message}`, 'error');
