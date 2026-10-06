@@ -26,7 +26,7 @@
             </div>
 
             <dl id="deviceInfoPanel" class="device-info hidden">
-                <div><dt>目标芯片</dt><dd id="deviceTarget">-</dd></div>
+                <div><dt>芯片版本</dt><dd id="deviceChipVersion">-</dd></div>
                 <div><dt>MAC 地址</dt><dd id="deviceMac">-</dd></div>
                 <div><dt>VID:PID</dt><dd id="deviceVidPid">-</dd></div>
                 <div><dt>Flash 容量</dt><dd id="deviceFlashSize">-</dd></div>
@@ -48,12 +48,11 @@
                 -->
             </div>
 
-            <p id="firmwareHint" class="firmware-hint">每次烧录前自动从 CDN 拉取最新固件，烧录到 flash 起始地址</p>
+            <p id="firmwareHint" class="firmware-hint">按设备芯片版本自动选择固件（每次烧录前从 CDN 实时拉取）</p>
 
             <div class="action-row">
                 <button id="flashBtn" class="btn btn-primary btn-flash">⚡ 烧录固件</button>
                 <div class="action-row-side">
-                    <button id="downloadBtn" class="btn btn-secondary" type="button" hidden>下载固件</button>
                     <button id="eraseBtn" class="btn btn-danger">清空 flash</button>
                 </div>
             </div>
@@ -76,11 +75,11 @@
     </div>
 
     <script type="module" src="./js/app.js"></script>
-    <!-- Web Serial 不可用时的引导弹窗：直接下载固件走 esptool 等命令行烧录 -->
+    <!-- Web Serial 不可用时的引导弹窗：改用 esptool 等命令行烧录 -->
     <div class="modal-overlay" id="webserialModal" hidden>
         <div class="modal-card">
             <h3>当前浏览器不支持 Web Serial</h3>
-            <p>在线一键烧录需要 Chrome / Edge 等支持 <strong>Web Serial API</strong> 的浏览器。你也可以点击「下载固件」保存 .bin 文件，然后用 esptool 手动烧录：<br><code>esptool.py --chip esp32p4 write_flash 0x0 p4-hid-mapper.bin</code></p>
+            <p>在线一键烧录需要 Chrome / Edge 等支持 <strong>Web Serial API</strong> 的浏览器。也可以用桌面版 esptool 手动烧录：<br><code>esptool.py --chip esp32p4 write_flash 0x0 p4-hid-mapper.bin</code></p>
             <div class="modal-actions">
                 <button id="modalCloseBtn" class="btn" type="button">知道了</button>
             </div>

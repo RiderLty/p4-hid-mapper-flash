@@ -6,19 +6,23 @@ ESP32-P4 固件在线烧录工具。参考 [pico-hid-mapper-flash](../pico-hid-m
 
 与参考项目一样：纯 ES6 模块，无构建步骤、无外部运行时依赖。
 
-- `index.html` — 页面结构（中文 UI）。版本选择已暂时注释，当前仅使用固定测试 URL。
+- `index.html` — 页面结构（中文 UI）。
 - `style.css` — 沿用参考项目样式。
-- `js/config.js` — 固件地址与常量（烧录偏移 `FLASH_OFFSET = 0x0`、波特率、flash 容量等）。
-- `js/app.js` — UI 控制器：Web Serial 连接、芯片识别、下载固件、烧录进度、擦除、重启。
+- `js/config.js` — 芯片版本 → 固件 hash KV 接口的 map、CDN 前缀、烧录偏移（`FLASH_OFFSET = 0x0`）、波特率等。
+- `js/app.js` — UI 控制器：Web Serial 连接、芯片筛选、按版本下载固件、烧录进度、擦除、重启。
 - `js/md5.js` — 纯 JS 同步 MD5（esptool-js 的 `calculateMD5Hash` 回调需要同步返回值）。
 - `vendor/esptool/bundle.js` — esptool-js 0.7.0 自包含 bundle（含 pako）。
 
-## 固件来源
+## 固件来源与芯片筛选
 
-固件不在仓库内，页面在每次点击烧录时实时从 CDN 拉取（带缓存规避参数）：
+固件不在仓库内。页面连接设备后按 **芯片版本** 决定烧什么：
 
-- 测试地址：`FIRMWARE_URL`（`js/config.js`）— `https://1833788059.cdn.123clouddisk.com/.../p4-hid-mapper-<hash>.bin`
-- 当前固件是 ESP-IDF `merge_bin` 输出的合并镜像（bootloader @0x2000、分区表 @0x8000、app @0x20000），整包从 **0x0** 烧录。若改为单 app 镜像，需把 `FLASH_OFFSET` 改成分区偏移。
+1. esptool 识别芯片描述（如 `ESP32-P4 (revision v3.1)`），只接受 `ESP32-P4` 且版本在支持列表内的设备，否则拒绝并断开。
+2. 版本号查 `FIRMWARE_HASH_URLS` map（`js/config.js`）得到 KV 接口，取回版本 hash（`{"key":..., "value":"<hash>"}`）。
+3. 拼 `https://1833788059.cdn.123clouddisk.com/.../p4-hid-mapper-{hash}.bin` 下载（带缓存规避）。
+
+当前支持：`v1.3`（固件 5.5.2）、`v3.1`（固件 6.1.0，KV 上传前会 404）。扩充新版本只需在 map 里加一行。
+固件是 ESP-IDF `merge_bin` 合并镜像，整包从 **0x0** 烧录。
 
 ## 运行
 

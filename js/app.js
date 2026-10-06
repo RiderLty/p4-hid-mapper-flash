@@ -10,7 +10,10 @@
 
 import { Transport, ESPLoader } from '../vendor/esptool/bundle.js';
 import {
-    FIRMWARE_URL,
+    REQUIRED_CHIP,
+    FIRMWARE_HASH_URLS,
+    FIRMWARE_CDN_PREFIX,
+    FIRMWARE_CDN_SUFFIX,
     FETCH_TIMEOUT,
     FLASH_OFFSET,
     FLASH_SIZE,
@@ -26,6 +29,7 @@ import { md5Hex } from './md5.js';
 /**
  * @typedef {Object} FirmwareData
  * @property {string} name
+ * @property {string} hash 固件版本 hash（KV 接口返回）
  * @property {Uint8Array} data
  * @property {number} origSize
  * @property {number} downloadSpeed 下载网速（字节/秒）
@@ -45,8 +49,8 @@ let transport = null;
 let esploader = null;
 /** @type {boolean} 是否正在执行获取/烧录/擦除等操作（防止重复点击） */
 let busy = false;
-/** @type {string|null} 连接后 esptool 识别的芯片描述（如 "ESP32-P4 (revision v3.1)"） */
-let chipDescription = null;
+/** @type {string|null} 连接后从 esptool 芯片描述里提取的版本号（如 "v3.1"），仅接受 REQUIRED_CHIP 的芯片 */
+let chipVersion = null;
 /** @type {string|null} 连接后读取的芯片 MAC 地址 */
 let macAddress = null;
 /** @type {number} 实测 flash 容量（字节）；0 表示未实测（用配置值兜底） */
@@ -71,7 +75,7 @@ const statusLine = document.getElementById('statusLine');
 /** @type {HTMLElement} */
 const deviceInfoPanel = document.getElementById('deviceInfoPanel');
 /** @type {HTMLElement} */
-const deviceTarget = document.getElementById('deviceTarget');
+const deviceChipVersion = document.getElementById('deviceChipVersion');
 /** @type {HTMLElement} */
 const deviceMac = document.getElementById('deviceMac');
 /** @type {HTMLElement} */
@@ -93,7 +97,6 @@ const activityContent = document.getElementById('activityContent');
 
 // Web Serial 不可用引导
 const firmwareHint = document.getElementById('firmwareHint');
-const downloadBtn = /** @type {HTMLButtonElement} */ (document.getElementById('downloadBtn'));
 const webserialModal = document.getElementById('webserialModal');
 const modalCloseBtn = /** @type {HTMLButtonElement} */ (document.getElementById('modalCloseBtn'));
 
@@ -109,19 +112,14 @@ function startup() {
     // 记录已加载
     logActivity('p4flash 已加载', 'info');
 
-    // Web Serial 可用：在线烧录是唯一路径，不展示「下载固件」按钮（HTML 中默认 hidden）
-    // Web Serial 不可用：弹窗告知，并把「烧录固件」替换为「下载固件」——
-    // 不支持的环境只允许下载，不允许在线烧录（擦除 / 连接同样禁用）
+    // Web Serial 不可用：弹窗告知改用 esptool 手动烧录（擦除 / 连接 / 烧录全部禁用）
     if (!('serial' in navigator)) {
         showWebserialModal();
         flashBtn.hidden = true;
-        // 下载固件成为此环境下唯一可用操作，升级为主按钮样式
-        downloadBtn.hidden = false;
-        downloadBtn.classList.add('btn-primary');
         eraseBtn.disabled = true;
         connectBtn.disabled = true;
-        updateStatus('当前浏览器不支持 Web Serial，可下载固件后用 esptool 手动烧录');
-        logActivity('当前浏览器不支持 Web Serial：已切换为下载固件 + esptool 手动烧录模式', 'info');
+        updateStatus('当前浏览器不支持 Web Serial，请改用 Chrome / Edge 或 esptool 手动烧录');
+        logActivity('当前浏览器不支持 Web Serial', 'info');
     }
 
     // 更新界面
@@ -209,8 +207,8 @@ function updateDeviceInfo() {
     deviceFlashOffset.textContent = `0x${FLASH_OFFSET.toString(16)}`;
     deviceEraseBlock.textContent = formatBytes(4096);
 
-    // 芯片 / MAC / 容量在 esptool 完成识别（esploader.main()）之后才有
-    deviceTarget.textContent = chipDescription || '-';
+    // 芯片版本 / MAC / 容量在 esptool 完成识别（esploader.main()）之后才有
+    deviceChipVersion.textContent = chipVersion || '-';
     deviceMac.textContent = macAddress || '-';
     deviceFlashSize.textContent = detectedFlashSize
         ? `${formatBytes(detectedFlashSize)}（实测）`
@@ -346,14 +344,53 @@ function addCacheBuster(url) {
 }
 
 /**
- * 从 CDN 下载固件并计算校验值。
+ * 解析当前设备芯片版本对应的固件下载地址。
+ * 先用版本号查 FIRMWARE_HASH_URLS 得到 KV 接口，取回版本 hash，再拼 CDN 地址。
+ * @returns {Promise<{url: string, fileName: string, hash: string}>}
+ */
+async function resolveFirmwareSource() {
+    if (!chipVersion) {
+        throw new Error('未连接设备，无法确定芯片版本');
+    }
+    const hashUrl = FIRMWARE_HASH_URLS[chipVersion];
+    if (!hashUrl) {
+        throw new Error(`芯片版本 ${chipVersion} 暂无固件`);
+    }
+
+    const hashRes = await withTimeout(
+        async () => fetch(addCacheBuster(hashUrl), { cache: 'no-store' }),
+        FETCH_TIMEOUT,
+        '获取版本'
+    );
+    if (!hashRes.ok) {
+        throw new Error(`获取版本失败：HTTP ${hashRes.status}`);
+    }
+    const hashJson = await hashRes.json();
+    const hash = hashJson.value;
+    if (!hash) {
+        throw new Error('版本接口未返回 hash');
+    }
+
+    return {
+        url: `${FIRMWARE_CDN_PREFIX}${hash}${FIRMWARE_CDN_SUFFIX}`,
+        fileName: `p4-hid-mapper-${hash}.bin`,
+        hash,
+    };
+}
+
+/**
+ * 按当前设备的芯片版本从 CDN 下载固件并计算校验值。
  * 每次调用都会带新的缓存规避参数，保证不命中缓存；失败时抛错。
  * @returns {Promise<FirmwareData>}
  */
 async function fetchFirmwareData() {
+    logActivity('获取固件中…', 'info');
+
+    const { url, fileName, hash } = await resolveFirmwareSource();
+
     const startTime = Date.now();
     const res = await withTimeout(
-        async () => fetch(addCacheBuster(FIRMWARE_URL), { cache: 'no-store' }),
+        async () => fetch(addCacheBuster(url), { cache: 'no-store' }),
         FETCH_TIMEOUT,
         '获取固件'
     );
@@ -376,41 +413,7 @@ async function fetchFirmwareData() {
     // MD5（esptool 烧录后整包校验用）
     const md5 = md5Hex(fwData);
 
-    return { name: 'p4-hid-mapper.bin', data: fwData, origSize: fwData.length, downloadSpeed, sha256Short, md5 };
-}
-
-/**
- * 直接把固件下载为文件（不经 Web Serial）。
- * 供不支持 Web Serial 的浏览器走「下载 + esptool 手动烧录」路径，也可随时手动取固件。
- * @returns {Promise<void>}
- */
-async function downloadFirmwareFile() {
-    try {
-        updateStatus('下载固件中…');
-        logActivity('下载固件…', 'info');
-        const res = await withTimeout(
-            async () => fetch(addCacheBuster(FIRMWARE_URL), { cache: 'no-store' }),
-            FETCH_TIMEOUT,
-            '下载固件'
-        );
-        if (!res.ok) {
-            throw new Error(`HTTP ${res.status} ${res.statusText}`);
-        }
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = 'p4-hid-mapper.bin';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-        updateStatus('固件已下载');
-        logActivity(`固件已下载（${formatBytes(blob.size)}）`, 'info');
-    } catch (error) {
-        updateStatus('下载失败');
-        logActivity(`错误：${error.message}`, 'error');
-    }
+    return { name: fileName, hash, data: fwData, origSize: fwData.length, downloadSpeed, sha256Short, md5 };
 }
 
 /** 显示 Web Serial 不可用引导弹窗。 */
@@ -486,7 +489,23 @@ async function connect() {
         });
 
         const chipName = await esploader.main();
-        chipDescription = chipName;
+
+        // 芯片筛选：只接受 REQUIRED_CHIP 且版本在 FIRMWARE_HASH_URLS 里的芯片，
+        // 否则直接终止（断开连接）
+        const descMatch = chipName.match(/^(.+?) \(revision (v[\d.]+)\)$/);
+        const family = descMatch ? descMatch[1] : chipName;
+        const revision = descMatch ? descMatch[2] : null;
+        if (family !== REQUIRED_CHIP || !revision || !FIRMWARE_HASH_URLS[revision]) {
+            const reason = family !== REQUIRED_CHIP
+                ? `不支持的芯片：${family}`
+                : `不支持的芯片版本：${revision || '未知'}`;
+            logActivity(`连接被拒绝：${reason}`, 'error');
+            logActivity(`仅支持 ${REQUIRED_CHIP}（${Object.keys(FIRMWARE_HASH_URLS).join(' / ')}）`, 'info');
+            updateStatus('不支持的设备');
+            await closeAndReset();
+            return;
+        }
+        chipVersion = revision;
 
         // MAC 与实测 flash 容量：识别完成后从芯片读取，失败只记日志不影响连接
         try {
@@ -509,14 +528,31 @@ async function connect() {
     } catch (error) {
         logActivity(`连接失败：${error.message}`, 'error');
         logActivity('提示：请按住板上 BOOT 键，同时按一下复位（或重新插拔 USB）让芯片进入下载模式，再重试', 'warning');
-        esploader = null;
-        transport = null;
-        port = null;
-        chipDescription = null;
-        macAddress = null;
-        detectedFlashSize = 0;
+        await closeAndReset();
         updateStatus('连接失败');
     }
+}
+
+/**
+ * 关闭串口并清空全部连接状态（不抛错）。
+ * 用于芯片被拒绝、连接失败后的收尾——此时 loader 状态未知，尽力关闭即可。
+ * @returns {Promise<void>}
+ */
+async function closeAndReset() {
+    if (transport) {
+        try {
+            await transport.disconnect();
+        } catch (error) {
+            console.log(`关闭串口时出错：${error.message}`);
+        }
+    }
+    esploader = null;
+    transport = null;
+    port = null;
+    chipVersion = null;
+    macAddress = null;
+    detectedFlashSize = 0;
+    updateUi();
 }
 
 /**
@@ -542,7 +578,7 @@ async function disconnect() {
         esploader = null;
         transport = null;
         port = null;
-        chipDescription = null;
+        chipVersion = null;
         macAddress = null;
         detectedFlashSize = 0;
     }
@@ -597,9 +633,16 @@ async function flash() {
 
     busy = true;
     updateUi();
-    updateStatus('正在获取固件…');
 
-    // 1. 每次烧录都重新拉取固件（带新的缓存规避参数）
+    // 1. 先连接设备：固件地址取决于识别出的芯片版本
+    updateStatus('正在连接设备…');
+    if (!(await checkAndTryConnect())) {
+        busy = false;
+        updateUi();
+        return;
+    }
+
+    // 2. 按芯片版本拉取固件（带新的缓存规避参数）
     let firmware;
     try {
         firmware = await fetchFirmwareData();
@@ -607,13 +650,6 @@ async function flash() {
     } catch (error) {
         logActivity(`获取固件失败：${error.message}`, 'error');
         updateStatus('获取固件失败');
-        busy = false;
-        updateUi();
-        return;
-    }
-
-    // 2. 连接设备（未连接则先请求选择设备）
-    if (!(await checkAndTryConnect())) {
         busy = false;
         updateUi();
         return;
@@ -764,10 +800,6 @@ flashBtn.addEventListener('click', async () => {
 
 eraseBtn.addEventListener('click', async () => {
     await eraseFlash();
-});
-
-downloadBtn.addEventListener('click', () => {
-    downloadFirmwareFile();
 });
 
 modalCloseBtn.addEventListener('click', () => {

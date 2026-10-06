@@ -2,8 +2,25 @@
 // 配置文件：固件地址与各项常量
 //
 
-/** @type {string} 测试用固件下载地址（先跑通流程：固定 URL，不走版本 hash 接口） */
-export const FIRMWARE_URL = 'https://1833788059.cdn.123clouddisk.com/1833788059/direct/projects/p4-hid-mapper/p4-hid-mapper-4493638a1a8980f69141746f5c65941c3bfce6685eaa71f4ab59a1f1f30f1036.bin';
+/** @type {string} 只接受的目标芯片型号（连接后按 esptool 识别结果过滤） */
+export const REQUIRED_CHIP = 'ESP32-P4';
+
+/**
+ * 支持的芯片版本 → 稳定版固件 hash 的 KV 接口地址。
+ * key 是从 esptool 芯片描述（如 "ESP32-P4 (revision v3.1)"）里提取的版本号，
+ * 扩充新版本时在这里加一行即可；不在表里的版本连接时会被拒绝。
+ * @type {Object<string, string>}
+ */
+export const FIRMWARE_HASH_URLS = {
+    'v1.3': 'https://kvstore.rd5isto.org/api/kv/p4-hid-mapper-stable-hash-5_5_2',
+    'v3.1': 'https://kvstore.rd5isto.org/api/kv/p4-hid-mapper-stable-hash-6_1_0',
+};
+
+/** @type {string} 固件 CDN 前缀，拼接版本 hash 与后缀得到完整下载地址 */
+export const FIRMWARE_CDN_PREFIX = 'https://1833788059.cdn.123clouddisk.com/1833788059/direct/projects/p4-hid-mapper/p4-hid-mapper-';
+
+/** @type {string} 固件文件后缀 */
+export const FIRMWARE_CDN_SUFFIX = '.bin';
 
 /** @type {number} 网络获取固件的超时时间（毫秒） */
 export const FETCH_TIMEOUT = 30000;
@@ -15,7 +32,7 @@ export const FETCH_TIMEOUT = 30000;
  */
 export const FLASH_OFFSET = 0x0;
 
-/** @type {number} 板上 flash 芯片容量（字节），用于容量显示（整片擦除由 esptool chip erase 完成） */
+/** @type {number} 板上 flash 芯片容量（字节），实测失败时的兜底显示值（整片擦除由 esptool chip erase 完成） */
 export const FLASH_SIZE = 16 * 1024 * 1024;
 
 /** @type {number} ROM bootloader 阶段波特率 */
