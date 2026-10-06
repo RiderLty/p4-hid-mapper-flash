@@ -1,0 +1,506 @@
+/* Copyright (C) 2025 Piers Finlayson <piers@piers.rocks> */
+/* MIT License */
+
+:root {
+    --color-bg: #0f1419;
+    --color-bg-card: #1a2129;
+    --color-border: #2b3540;
+    --color-text-primary: #e6edf3;
+    --color-text-secondary: #9aa7b4;
+    --color-accent: #06b6d4;
+    --color-success: #22c55e;
+    --color-warning: #eab308;
+    --color-danger: #ef4444;
+    --color-latest: #ea580c;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "PingFang SC",
+        monospace;
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --color-bg: #f4f6f8;
+        --color-bg-card: #ffffff;
+        --color-border: #d8dee4;
+        --color-text-primary: #1f2328;
+        --color-text-secondary: #57606a;
+        --color-accent: #0e8fa8;
+        --color-success: #1a7f37;
+        --color-warning: #9a6700;
+        --color-danger: #cf222e;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 20px 48px;
+}
+
+.header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 1.9rem;
+}
+
+.subtitle {
+    margin: 4px 0 0;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+.card {
+    margin-top: 20px;
+    padding: 20px;
+    background-color: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+}
+
+.card h2 {
+    margin: 0 0 14px;
+    font-size: 1.05rem;
+    color: var(--color-text-secondary);
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.status-line {
+    font-weight: 600;
+}
+
+/* 按钮 */
+.btn {
+    padding: 8px 18px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* hidden 属性需显式声明，避免被后续 .btn 系列的 display 规则覆盖 */
+.btn[hidden] {
+    display: none;
+}
+
+.btn:not(:disabled):hover {
+    filter: brightness(1.15);
+}
+
+.btn:focus {
+    outline: none;
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.btn-primary {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #ffffff;
+}
+
+.btn-secondary {
+    background-color: transparent;
+    color: var(--color-text-primary);
+}
+
+.btn-danger {
+    background-color: var(--color-danger);
+    border-color: var(--color-danger);
+    color: #ffffff;
+}
+
+/* 烧录卡片头部：标题 + 版本切换 */
+.card-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.card-header h2 {
+    margin: 0;
+}
+
+/* 版本 + 平台切换的容器 */
+.switch-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 平台切换在最新版渠道下仅隐藏视觉、保留占位，避免切换稳定版/最新版时标题行跳动 */
+.version-switch.platform-switch {
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.version-switch.platform-switch.is-invisible {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* 当前固件说明 */
+.firmware-hint {
+    margin: 0 0 14px;
+    padding: 9px 14px;
+    background-color: var(--color-bg);
+    border: 1px dashed var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+}
+
+/* 操作按钮区：主按钮 + 次要按钮组 */
+.action-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-flash {
+    flex: 1 1 200px;
+    max-width: 280px;
+    padding: 11px 18px;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.action-row-side {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-left: auto;
+}
+
+@media (max-width: 520px) {
+    .action-row-side {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .action-row-side .btn {
+        flex: 1;
+    }
+
+    .btn-flash {
+        max-width: none;
+    }
+}
+
+/* 清空 flash：描边样式弱化视觉重量，悬停时填充警示色 */
+.btn-danger {
+    background-color: transparent;
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+
+.btn-danger:not(:disabled):hover {
+    background-color: var(--color-danger);
+    color: #ffffff;
+}
+
+/* 进度区：标签 + 百分比 + 进度条 */
+.progress-area {
+    margin-top: 18px;
+}
+
+.progress-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+}
+
+.progress-percent {
+    font-family: var(--font-mono);
+    color: var(--color-text-primary);
+}
+
+/* 进度条 */
+.progress-bar {
+    margin-top: 0;
+    height: 10px;
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+/* 固件版本切换 */
+.version-switch {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+}
+
+.version-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border: none;
+    border-radius: 999px;
+    background-color: transparent;
+    color: var(--color-text-secondary);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.version-option::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--color-text-secondary);
+    transition: background-color 0.15s ease;
+}
+
+.version-option[data-channel='stable']::before {
+    background-color: var(--color-success);
+}
+
+.version-option[data-channel='latest']::before {
+    background-color: var(--color-warning);
+}
+
+.version-option[data-channel='stable'].is-active {
+    background-color: var(--color-success);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.35);
+}
+
+.version-option[data-channel='latest'].is-active {
+    background-color: var(--color-latest);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35);
+}
+
+.version-option.is-active::before {
+    background-color: #ffffff;
+}
+
+.version-option:not(.is-active):hover {
+    color: var(--color-text-primary);
+}
+
+.version-option:focus {
+    outline: none;
+}
+
+.version-option:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* 设备信息网格 */
+.device-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 6px 24px;
+    margin: 16px 0 0;
+}
+
+.device-info > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--color-border);
+}
+
+.device-info dt {
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.device-info dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    word-break: break-all;
+    text-align: right;
+}
+
+/* 输入框 */
+.input {
+    flex: 1;
+    min-width: 220px;
+    padding: 8px 12px;
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+
+/* 进度条 */
+.progress-fill {
+    width: 0;
+    height: 100%;
+    background-color: var(--color-accent);
+    border-radius: 6px;
+    transition: width 0.1s ease;
+}
+
+/* 活动日志 */
+.activity-log {
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 10px 12px;
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.log-entry {
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-info {
+    color: var(--color-text-secondary);
+}
+
+.log-success {
+    color: var(--color-success);
+}
+
+.log-warning {
+    color: var(--color-warning);
+}
+
+.log-error {
+    color: var(--color-danger);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* 目标平台切换（仅稳定版渠道可见；复用 version-option 视觉语言） */
+.version-option[data-platform='android']::before {
+    background-color: var(--color-success);
+}
+
+.version-option[data-platform='ios']::before {
+    background-color: var(--color-latest);
+}
+
+.version-option[data-platform='host']::before {
+    background-color: var(--color-accent);
+}
+
+.version-option[data-platform='android'].is-active {
+    background-color: var(--color-success);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.35);
+}
+
+.version-option[data-platform='ios'].is-active {
+    background-color: var(--color-latest);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35);
+}
+
+.version-option[data-platform='host'].is-active {
+    background-color: var(--color-accent);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(6, 182, 212, 0.35);
+}
+
+
+/* WebUSB 不可用引导弹窗 */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background-color: rgba(0, 0, 0, 0.45);
+}
+
+.modal-overlay[hidden] {
+    display: none;
+}
+
+.modal-card {
+    max-width: 480px;
+    width: 100%;
+    padding: 24px;
+    background-color: var(--color-bg, #ffffff);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.modal-card h3 {
+    margin: 0 0 10px;
+    font-family: var(--font-sans);
+    font-size: 1.1rem;
+}
+
+.modal-card p {
+    margin: 0 0 18px;
+    font-family: var(--font-sans);
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: var(--color-text-secondary, #475569);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
