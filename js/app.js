@@ -45,6 +45,12 @@ let transport = null;
 let esploader = null;
 /** @type {boolean} 是否正在执行获取/烧录/擦除等操作（防止重复点击） */
 let busy = false;
+/** @type {string|null} 连接后 esptool 识别的芯片描述（如 "ESP32-P4 (revision v3.1)"） */
+let chipDescription = null;
+/** @type {string|null} 连接后读取的芯片 MAC 地址 */
+let macAddress = null;
+/** @type {number} 实测 flash 容量（字节）；0 表示未实测（用配置值兜底） */
+let detectedFlashSize = 0;
 
 // Progress bar
 /** @type {number} */
@@ -67,15 +73,15 @@ const deviceInfoPanel = document.getElementById('deviceInfoPanel');
 /** @type {HTMLElement} */
 const deviceTarget = document.getElementById('deviceTarget');
 /** @type {HTMLElement} */
+const deviceMac = document.getElementById('deviceMac');
+/** @type {HTMLElement} */
 const deviceVidPid = document.getElementById('deviceVidPid');
 /** @type {HTMLElement} */
-const deviceFlashRange = document.getElementById('deviceFlashRange');
+const deviceFlashSize = document.getElementById('deviceFlashSize');
 /** @type {HTMLElement} */
 const deviceFlashOffset = document.getElementById('deviceFlashOffset');
 /** @type {HTMLElement} */
 const deviceEraseBlock = document.getElementById('deviceEraseBlock');
-/** @type {HTMLElement} */
-const deviceChipDesc = document.getElementById('deviceChipDesc');
 
 // 烧录操作
 const flashBtn = /** @type {HTMLButtonElement} */ (document.getElementById('flashBtn'));
@@ -200,26 +206,15 @@ function updateDeviceInfo() {
         deviceVidPid.textContent = '-';
     }
 
-    deviceFlashRange.textContent = `0x0 - 0x${FLASH_SIZE.toString(16)}（${formatBytes(FLASH_SIZE)}）`;
     deviceFlashOffset.textContent = `0x${FLASH_OFFSET.toString(16)}`;
     deviceEraseBlock.textContent = formatBytes(4096);
 
-    // 芯片信息要等 esptool 完成识别（esploader.main()）之后才有
-    if (esploader) {
-        try {
-            deviceTarget.textContent = esploader.chip.CHIP_NAME;
-        } catch {
-            deviceTarget.textContent = '-';
-        }
-        try {
-            deviceChipDesc.textContent = esploader.chip.getChipDescription();
-        } catch {
-            deviceChipDesc.textContent = '-';
-        }
-    } else {
-        deviceTarget.textContent = '-';
-        deviceChipDesc.textContent = '-';
-    }
+    // 芯片 / MAC / 容量在 esptool 完成识别（esploader.main()）之后才有
+    deviceTarget.textContent = chipDescription || '-';
+    deviceMac.textContent = macAddress || '-';
+    deviceFlashSize.textContent = detectedFlashSize
+        ? `${formatBytes(detectedFlashSize)}（实测）`
+        : `${formatBytes(FLASH_SIZE)}（配置值）`;
 
     deviceInfoPanel.classList.remove('hidden');
 }
@@ -491,6 +486,22 @@ async function connect() {
         });
 
         const chipName = await esploader.main();
+        chipDescription = chipName;
+
+        // MAC 与实测 flash 容量：识别完成后从芯片读取，失败只记日志不影响连接
+        try {
+            macAddress = await esploader.chip.readMac(esploader);
+        } catch (error) {
+            console.log(`读取 MAC 失败：${error.message}`);
+        }
+        try {
+            const detected = await esploader.detectFlashSize();
+            if (detected) {
+                detectedFlashSize = esploader.flashSizeBytes(detected);
+            }
+        } catch (error) {
+            console.log(`检测 flash 容量失败：${error.message}`);
+        }
 
         logActivity(`连接成功：${chipName}`, 'success');
         updateStatus(`已连接（${chipName}）`);
@@ -501,6 +512,9 @@ async function connect() {
         esploader = null;
         transport = null;
         port = null;
+        chipDescription = null;
+        macAddress = null;
+        detectedFlashSize = 0;
         updateStatus('连接失败');
     }
 }
@@ -528,6 +542,9 @@ async function disconnect() {
         esploader = null;
         transport = null;
         port = null;
+        chipDescription = null;
+        macAddress = null;
+        detectedFlashSize = 0;
     }
 }
 
@@ -697,7 +714,7 @@ async function eraseFlash() {
     updateUi();
     updateStatus('正在擦除 flash…');
     resetProgress();
-    logActivity('正在整片擦除 flash（16MB 需要一些时间）…', 'info');
+    logActivity(`正在整片擦除 flash（${formatBytes(detectedFlashSize || FLASH_SIZE)} 需要一些时间）…`, 'info');
 
     try {
         if (!(await checkAndTryConnect())) {
